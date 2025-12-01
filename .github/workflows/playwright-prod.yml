@@ -1,0 +1,136 @@
+name: Playwright Tests Prod
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    environment: E2E_ENV_PROD
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    env:
+      ENV: ${{ secrets.E2E_ENV_PROD }}
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Force a non-shallow checkout, so that we can reference $GITHUB_BASE_REF.
+          # See https://github.com/actions/checkout for more details.
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps
+
+      - name: Create .env from secret
+        run: printf '%s' "$ENV" > .env
+
+      # ----------------------------------------
+      # PR RUN → Only run tests that changed in the PR
+      # ----------------------------------------
+      - name: Run changed Playwright tests (PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          npx bddgen
+          npx playwright test --only-changed=${{ github.base_ref }}
+
+      # ----------------------------------------
+      # MAIN RUN → Run all tests on main branch
+      # ----------------------------------------
+      - name: Run Playwright tests
+        run: |
+          npx bddgen
+          npx playwright test --grep @login-success
+
+      # ----------------------------------------
+      # Allure CLI
+      # ----------------------------------------
+      - name: Install Allure CLI globally
+        run: npm install -g allure
+
+      - name: Generate Allure report
+        run: allure generate allure-results
+
+      - name: Create email summary
+        if: github.event_name == 'push'
+        id: create_email_body
+        run: bash scripts/generate-email-summary.sh
+
+      # ----------------------------------------
+      # Upload artifact
+      # ----------------------------------------
+      - name: Upload Allure report artifact
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: allure-report
+          path: allure-report/
+          retention-days: 30
+
+      # ----------------------------------------
+      # Deploy Allure Report to GitHub Pages
+      # ----------------------------------------
+      - name: Deploy Allure Report to GitHub Pages
+        if: github.event_name == 'push'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./allure-report
+          publish_branch: gh-pages
+          force_orphan: true
+
+      # ----------------------------------------
+      # Send Email with Allure Report Link
+      # ----------------------------------------
+      - name: Send Email with Allure Report Link
+        if: github.event_name == 'push'
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_HOST }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USER }}
+          password: ${{ secrets.SMTP_PASS }}
+          subject: "Playwright Test Execution Result - ${{ github.repository }}"
+          to: ${{ secrets.EMAIL_TO }}
+          from: "QA Automation Team <${{ secrets.SMTP_USER }}>"
+          body: |
+              Hello Team,
+
+              Playwright automated test run has finished.
+              
+              ==============================
+              🔹 TEST EXECUTION DETAILS
+              ==============================
+
+              • Status: ${{ job.status }}
+              • Workflow: ${{ github.workflow }}
+              • Run Number: ${{ github.run_number }}
+              • Run ID: ${{ github.run_id }}
+
+              ==============================
+              🔹 TEST SUMMARY
+              ==============================
+              ${{ steps.create_email_body.outputs.body }}
+
+              Full Report: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+
+              Repository: https://github.com/${{ github.repository }}
+              Commit: ${{ github.sha }}
+              Triggered by: ${{ github.actor }}
+              
+              Regards,
+              QA Automation Team
+            
+          

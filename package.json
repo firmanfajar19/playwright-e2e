@@ -1,0 +1,26 @@
+{
+  "name": "playwright-e2e",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/firmanfajar19/playwright-e2e.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/firmanfajar19/playwright-e2e/issues"
+  },
+  "homepage": "https://github.com/firmanfajar19/playwright-e2e#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.57.0",
+    "@types/node": "^24.10.1",
+    "allure-playwright": "^3.4.2",
+    "dotenv": "^17.2.3",
+    "playwright-bdd": "^8.4.2"
+  }
+}
